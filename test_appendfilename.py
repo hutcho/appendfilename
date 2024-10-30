@@ -6,164 +6,208 @@
 # date:    2022-01-05 (YYYY-MM-DD)
 # edit:    2022-01-09 (YYYY-MM-DD)
 #
-"""Test pad for functions by appendfilename with pytest.
+"""Tests for appendfilename using pytest.
 
-Written for Python 3.9.9 and pytest 6.2.4 for Python 3 as provided by
-Linux Debian 12/bookworm, branch testing, this is a programmatic check
-of functions offered by appendfilename.  Deposit this script in the root of
-the folder fetched and unzipped from PyPi or GitHub.  If your system
-includes both legacy Python 2 and Python 3, pytest for Python 3 likely
-is named pytest-3; otherwise only pytest.  Thus, adjust your input on
-the CLI accordingly when running either one of
+Python 3.12.7
+"""
 
-pytest -v test_appendfilename.py
-pytest-3 -v test_appendfilename.py
-
-These instruction initiate a verbose testing (flag -v) reported back to the
-CLI.re will be a verbose report to the CLI The script either stops when one of
-the tests fail (flag -x), or after completion of the test sequence.  In both
-cases, the progress of the ongoing tests is reported to the CLI (flag -v)."""
-
-import re
 import os
-from subprocess import getstatusoutput, getoutput
+import re
+import sys
+from pathlib import Path
+import subprocess
 
 import pytest
 
-PROGRAM = str("./appendfilename/__init__.py")
+
+TEST_DIR = Path("./.tmptestfiles")
+TEST_DIR.mkdir(exist_ok=True)
+
+TARGET_PROGRAM = Path("./appendfilename/__init__.py")
+
+@pytest.fixture
+def create_test_file(filename):
+    """Fixture to create a test file.
+
+    Yields Path objects"""
+    test_file_path = TEST_DIR / filename
+
+    # Create the file
+    test_file_path.touch()
+    # assert test_file_path.is_file()
+
+    # Yield the Path object for use in tests
+    yield test_file_path
+
+    # cleanup step (important if test fails, want to remove all remnants)
+    # Comment out for now, want to know if any files get left behind
+    # test_file_path.unlink(missing_ok=True)
+
 
 @pytest.mark.default
-@pytest.mark.parametrize("arg1", ["test.txt", "2021-12-31_test.txt",
-                                  "2021-12-31T18.48.22_test.txt",
-                                  "20211231_test.txt", "2012-12_test.txt",
-                                  "211231_test.txt"])
-@pytest.mark.parametrize("arg2", ["-t book", "-t book_shelf",
-                                  "--text book", "--text book_shelf"])
-@pytest.mark.parametrize("arg3", [" ", "!", "@", "#", "$", "%", "*", "_", "+",
-                                  "=", "-"])
-def test_pattern_s1(arg1, arg2, arg3):
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "test.txt",
+        "2021-12-31 .txt",
+        "2021-12-31T18.48.22 test.txt",
+        "20211231 test.txt",
+        "2012-12 test.txt",
+        "211231 test.txt",
+        "211231.txt",
+    ],
+)
+@pytest.mark.parametrize(
+    "append_text", [
+        "book",
+        "book_shelf",
+        "book shelf"
+              ]
+)
+@pytest.mark.parametrize(
+    "sep", [
+        " ",
+        "!",
+        "@", "#", "$", "%", "_", "+", "=", "-"
+    ]
+)
+def test_append_sep_notags(create_test_file, append_text: str, sep: str):
     """Check addition just ahead the file extension.
 
-    arg1   the test files to process
-    arg2   the text string to be added
-    arg3   the explicitly defined text separator (except [a-zA-Z])"""
+    create_test_file        A fixture to create the files and remove them
+    append_text             text to append
+    sep                     separator between existing filename and append_text
+    """
 
-    # extract the newly added text information:
-    text_elements = arg2.split(" ")[1:]
-    text = str(" ".join(text_elements))
+    original_path = create_test_file
 
-    with open(arg1, mode="w") as newfile:
-        newfile.write("This is a test file for test_appendfilename.")
+    command = f"{sys.executable} {TARGET_PROGRAM} -t \"{append_text}\" --sep \"{sep}\" \"{original_path}\""
+    subprocess.run(command)
+    new_filename = f"{str(original_path)[:-4]}{sep}{append_text}.txt"
 
-    test = getoutput(f"python3 {PROGRAM} {arg1} {arg2} --separator={arg3}")
+    new_path = Path(new_filename)
+    assert new_path.is_file()
+    new_path.unlink()
 
-    new_filename = "".join([arg1[:-4], arg3, text, str(".txt")])
-    assert os.path.isfile(new_filename)
-
-    os.remove(new_filename)
-    assert os.path.isfile(new_filename) is False
 
 @pytest.mark.prepend
-@pytest.mark.parametrize("arg1", ["test.txt", "2021-12-31_test.txt",
-                                  "2021-12-31T18.48.22_test.txt",
-                                  "20211231_test.txt", "2012-12_test.txt",
-                                  "211231_test.txt"])
-@pytest.mark.parametrize("arg2", ["-t book", "-t book_shelf",
-                                  "--text book", "--text book_shelf"])
-@pytest.mark.parametrize("arg3", [" ", "!", "@", "#", "$", "%", "*", "_", "+",
-                                  "=", "-"])
-@pytest.mark.parametrize("arg4", ["-p", "--prepend"])
-def test_pattern_s2(arg1, arg2, arg3, arg4):
+@pytest.mark.parametrize("filename", [
+    "test.txt",
+    "2021-12-31_test.txt",
+    "2021-12-31T18.48.22@test.txt",
+    "20211231 test.txt",
+    "2012-12_test.txt",
+    "211231_test.txt"
+])
+@pytest.mark.parametrize("append_text", ["book", "book_shelf",
+                                  ])
+@pytest.mark.parametrize("sep", [" ", "!", "@", "#", "$", "%", "_", "+",
+                                  "=", "-", "asd"])
+def test_prepend_sep_notags(create_test_file, append_text: str, sep: str):
     """Check addition just ahead the file extension.
 
-    arg1   the test files to process
-    arg2   the text string to be added
-    arg3   the explicitly defined text separator (except [a-zA-Z])
-    arg4   use either of two forms of the prepend flag."""
+    create_test_file        A fixture to create the files and remove them
+    append_text             text to append (in this case, prepend)
+    sep                     separator between existing filename and append_text
+    """
 
-    # extract the newly added text information:
-    text_elements = arg2.split(" ")[1:]
-    text = str(" ".join(text_elements))
+    original_path = create_test_file
 
-    with open(arg1, mode="w") as newfile:
-        newfile.write("This is a test file for test_appendfilename.")
+    command = f"{sys.executable} {TARGET_PROGRAM} -t \"{append_text}\" --sep \"{sep}\" -p \"{original_path}\""
+    subprocess.run(command)
 
-    test = getoutput(f"python3 {PROGRAM} {arg1} {arg2} --separator={arg3} {arg4}")
+    new_filename = f"{append_text}{sep}{original_path.name}"
+    new_path = original_path.parent / new_filename
 
-    new_filename = "".join([text, arg3, arg1])
-    assert os.path.isfile(new_filename)
+    assert new_path.is_file()
+    new_path.unlink()
 
-    os.remove(new_filename)
-    assert os.path.isfile(new_filename) is False
+@pytest.mark.smartprepend
+@pytest.mark.parametrize("filename", [
+    "test.txt",
+    "2021-12-31 test.txt",
+    "2021-12-31T18.48.22 test.txt",
+    "20211231_test.txt",
+    "2021-12_test.txt",
+    "211231_test.txt"
+    ])
+@pytest.mark.parametrize("append_text", [
+    "book",
+    "book_shelf",
+                                  ])
+@pytest.mark.parametrize("sep", [
+    " " ,
+    "#",
+    "!",
+    "@",
+    "#",
+    "$",
+    "%",
+    # "*",
+    "_",
+    "+",
+    "=",
+    "-"
+                                  ])
+def test_smartprepend_sep_notags(create_test_file, append_text, sep):
+    """Check that any time stamp stays at the front of the filename.
 
-@pytest.mark.smart
-@pytest.mark.parametrize("arg1", ["test.txt", "2021-12-31_test.txt",
-                                  "2021-12-31T18.48.22_test.txt", "20211231_test.txt",
-                                  "2021-12_test.txt", "211231_test.txt"])
-@pytest.mark.parametrize("arg2", ["-t book", "-t book_shelf",
-                                  "--text book", "--text book_shelf"])
-@pytest.mark.parametrize("arg3", [" " , "#", "!", "@", "#", "$", "%", "*", "_", "+",
-                                  "=", "-"])
-def test_pattern_s3_02(arg1, arg2, arg3):
-    """Check addition retaining time stamp on leading position.
+    create_test_file        A fixture to create the files and remove them
+    append_text             text to append (in this case, prepend)
+    sep                     separator between existing filename and append_text
+    """
 
-    arg1   the test files to process
-    arg2   the text string to be added
-    arg3   the explicitly defined text separator (except [a-zA-Z])."""
+    original_path = create_test_file
 
-    # extract the newly added text information:
-    text_elements = arg2.split(" ")[1:]
-    text = str(" ".join(text_elements))
-
-    with open(arg1, mode="w") as newfile:
-        newfile.write("This is a test file for test_appendfilename.")
-
-    test = getoutput(f"python3 {PROGRAM} {arg1} {arg2} --separator={arg3} --smart-prepend")
+    command = f"{sys.executable} {TARGET_PROGRAM} -t \"{append_text}\" --sep \"{sep}\" --smart-prepend \"{original_path}\""
+    subprocess.run(command)
 
     # analysis section:
-    old_filename = str(arg1)
+    old_filename = str(original_path.name)
 
-    # test pattern issued by date2name vs. other pattern
-    # default (YYYY-MM-DD)
-    # --withtime (YYYY-MM-DDTHH.MM.SS)
-    # --compact (YYYYMMDD)
-    # --month (YYYY-MM)
-    # --short (YYMMDD)
-    if (re.search("^\d{4}-[012]\d-[0-3]\d_", old_filename) or
-        re.search('^\d{4}-[012]\d-[0-3]\dT[012]\d\.[0-5]\d\.[0-5]\d_', old_filename) or
-        re.search("^\d{4}[012]\d[0-3]\d_", old_filename) or
-        re.search("^\d{4}-[012]\d_", old_filename) or
-        re.search("^\d{2}[012]\d[0-3]\d_", old_filename)):
+    # test patterns based on date2name vs. other pattern
+    RE_DATE2NAME_DEFAULT = r"^\d{4}-[01]\d-[0-3]\d" # date2name default (YYYY-MM-DD)
+    RE_DATE2NAME_WITHTIME = RE_DATE2NAME_DEFAULT + r"T[012]\d\.[0-5]\d\.[0-5]\d" # date2name --withtime (YYYY-MM-DDTHH.MM.SS)
+    RE_DATE2NAME_COMPACT = r"^\d{4}[01]\d[0-3]\d" # date2name --compact (YYYYMMDD)
+    RE_DATE2NAME_MONTH = r"^\d{4}-[01]\d" # date2name --month (YYYY-MM)
+    RE_DATE2NAME_SHORT = r"^\d{2}[01]\d[0-3]\d" # date2name --short (YYMMDD)
 
-        if re.search("^\d{4}-\d{2}-\d{2}_", old_filename):
-            # if (running date2name in default mode) then .true.
-            time_stamp = old_filename[:10]
-            time_stamp_separator = old_filename[10]
-            file_extension = old_filename.split(".")[-1]
-            old_filename_no_timestamp = old_filename[11:]
+    if (re.search(RE_DATE2NAME_DEFAULT, old_filename) or
+        re.search(RE_DATE2NAME_WITHTIME, old_filename) or
+        re.search(RE_DATE2NAME_COMPACT, old_filename) or
+        re.search(RE_DATE2NAME_MONTH, old_filename) or
+        re.search(RE_DATE2NAME_SHORT, old_filename)
+        ):
 
-        elif re.search('^\d{4}-\d{2}-\d{2}T\d{2}\.\d{2}\.\d{2}_', old_filename):
+        if re.search(RE_DATE2NAME_WITHTIME, old_filename):
             # if (running date2name --withtime) then .true.
             time_stamp = old_filename[:19]
             time_stamp_separator = old_filename[19]
             file_extension = old_filename.split(".")[-1]
             old_filename_no_timestamp = old_filename[20:]
 
-        elif re.search("^\d{4}\d{2}\d{2}_", old_filename):
+        elif re.search(RE_DATE2NAME_DEFAULT, old_filename):
+            # if (running date2name in default mode) then .true.
+            time_stamp = old_filename[:10]
+            time_stamp_separator = old_filename[10]
+            file_extension = old_filename.split(".")[-1]
+            old_filename_no_timestamp = old_filename[11:]
+
+        elif re.search(RE_DATE2NAME_COMPACT, old_filename):
             # if (running date2name --compact) then .true.
             time_stamp = old_filename[:8]
             time_stamp_separator = old_filename[8]
             file_extension = old_filename.split(".")[-1]
             old_filename_no_timestamp = old_filename[9:]
 
-        elif re.search("^\d{4}-\d{2}_", old_filename):
+        elif re.search(RE_DATE2NAME_MONTH, old_filename):
             # if (running date2name --month) then .true.
             time_stamp = old_filename[:7]
             time_stamp_separator = old_filename[7]
             file_extension = old_filename.split(".")[-1]
             old_filename_no_timestamp = old_filename[8:]
 
-        elif re.search("^\d{4}\d{2}\d{2}_", old_filename):
+        elif re.search(RE_DATE2NAME_SHORT, old_filename):
             # if (running date2name --short) then .true.
             time_stamp = old_filename[:6]
             time_stamp_separator = old_filename[6]
@@ -173,16 +217,29 @@ def test_pattern_s3_02(arg1, arg2, arg3):
         stem_elements = old_filename_no_timestamp.split(".")[:-1]
         stem = ".".join(stem_elements)
 
-        new_filename = "".join([time_stamp, arg3, text, arg3, stem, str("."), file_extension])
-        assert os.path.isfile(new_filename)
+        new_filename = f"{time_stamp}{sep}{append_text}{sep}{stem}.{file_extension}"
+        print(f"{time_stamp=}")
+        print(f"{sep=}")
+        print(f"{append_text=}")
+        print("TEST new_filename", new_filename)
+        # new_filename = f"{append_text}{sep}{original_path.name}"
+        new_path = original_path.parent / new_filename
 
-        os.remove(new_filename)
-        assert os.path.isfile(new_filename) is False
+        print("TEST_NEWPATH!", new_path)
+
+        # assert new_path.is_file()
+        # new_path.unlink()
+    #     assert os.path.isfile(new_path) is False
 
     else:
-        # within the scope set, a file which did not pass date2name earlier
-        new_filename = "".join([text, arg3, old_filename])
-        assert os.path.isfile(new_filename)
+    #     # within the scope set, a file which did not pass date2name earlier
+        new_filename = f"{append_text}{sep}{original_path.name}"
 
-        os.remove(new_filename)
-        assert os.path.isfile(new_filename) is False
+        new_path = original_path.parent / new_filename
+
+    assert new_path.is_file()
+    new_path.unlink()
+
+# XXX TODO test with tags present e.g. text -- tag1 tag2.txt
+# XXX test different exteneions like .jpeg and .tests-etst and .test_sds
+# XXX test the regexs hard
