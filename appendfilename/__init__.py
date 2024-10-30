@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 # import sys
-
 # if not sys.warnoptions:
 #     import os, warnings
 #     warnings.simplefilter("default") # Change the filter in this process
@@ -12,12 +11,12 @@ import argparse
 import logging
 import os
 import re
-from pathlib import Path
 import readline  # for raw_input() reading from stdin
 import sys
 import time
-from optparse import OptionParser
-from textwrap import dedent
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 PROG_VERSION = u"Time-stamp: <2022-01-07 17:10:27 vk>"
 PROG_VERSION_DATE = PROG_VERSION[13:23]
@@ -35,44 +34,43 @@ WITHTIME_AND_SECONDS_PATTERN  = re.compile(
     fr"^(([12]\d{{3}}-[01]\d-[0123]\d{RE_TIME_PORTION}?)|{RE_YYYYMMDD}|{RE_YYYYdashMM}|{RE_YYMMDD})(?P<timestamp_filename_seperator>[- _.])(.+)"
     )
 
-USAGE = dedent(f"""
+# USAGE = dedent(f"""
 
-    appendfilename [<options>] <list of files>
+#     appendfilename [<options>] <list of files>
 
-    This tool inserts text between the old file name and optional tags or file extension.
+#     This tool inserts text between the old file name and optional tags or file extension.
 
-    Text within file names is placed between the actual file name and
-    the file extension or (if found) between the actual file namd and
-    a set of tags separated with {FILENAME_TAG_SEPARATOR}.
+#     Text within file names is placed between the actual file name and
+#     the file extension or (if found) between the actual file namd and
+#     a set of tags separated with {FILENAME_TAG_SEPARATOR}.
 
-    e.g.
-        Update for the Boss{DEFAULT_TEXT_SEPARATOR}<NEW TEXT HERE>.pptx
-        2013-05-16T15.31.42 Error message{DEFAULT_TEXT_SEPARATOR}<NEW TEXT HERE>{FILENAME_TAG_SEPARATOR}screenshot projectB.png
+#     e.g.
+#         Update for the Boss{DEFAULT_TEXT_SEPARATOR}<NEW TEXT HERE>.pptx
+#         2013-05-16T15.31.42 Error message{DEFAULT_TEXT_SEPARATOR}<NEW TEXT HERE>{FILENAME_TAG_SEPARATOR}screenshot projectB.png
 
-    When renaming a symbolic link whose source file has a matching file
-    name, the source file gets renamed as well.
+#     When renaming a symbolic link whose source file has a matching file
+#     name, the source file gets renamed as well.
 
-    Example usage:
+#     Example usage:
 
-        > appendfilename --text="of projectA" "the presentation.pptx"
-        > "the presentation{DEFAULT_TEXT_SEPARATOR}of projectA.pptx"
+#         > appendfilename --text="of projectA" "the presentation.pptx"
+#         > "the presentation{DEFAULT_TEXT_SEPARATOR}of projectA.pptx"
 
-        > appendfilename "2013-05-09T16.17_img_00042 -- fun.jpeg"
-          Please enter text: Peter
-        > "2013-05-09T16.17_img_00042{DEFAULT_TEXT_SEPARATOR}Peter -- fun.jpeg"
+#         > appendfilename "2013-05-09T16.17_img_00042 -- fun.jpeg"
+#           Please enter text: Peter
+#         > "2013-05-09T16.17_img_00042{DEFAULT_TEXT_SEPARATOR}Peter -- fun.jpeg"
 
 
-    :copyright: (c) 2013 or later by Karl Voit <tools@Karl-Voit.at>
-    :license: GPL v3 or any later version
-    :URL: https://github.com/novoid/appendfilename
-    :bugreports: via github or <tools@Karl-Voit.at>
-    :version: {PROG_VERSION_DATE}
-    """)
+#     :copyright: (c) 2013 or later by Karl Voit <tools@Karl-Voit.at>
+#     :license: GPL v3 or any later version
+#     :URL: https://github.com/novoid/appendfilename
+#     :bugreports: via github or <tools@Karl-Voit.at>
+#     :version: {PROG_VERSION_DATE}
+#     """)
 
 # file names containing optional tags matches following regular expression
-FILE_WITH_EXTENSION_REGEX = re.compile(r"(.*?)(( -- .*)?(\.\w+?)?)$")
-FILE_WITH_EXTENSION_BASENAME_INDEX = 1
-FILE_WITH_EXTENSION_TAGS_AND_EXT_INDEX = 2
+RE_TAG_ENDING = r"(( -- .*)?(\.\w+?)?)$"
+FILE_WITH_EXTENSION_REGEX = re.compile(fr"(.*?){RE_TAG_ENDING}")
 
 
 # RegEx which defines "what is a file name component" for tab completion:
@@ -88,17 +86,18 @@ INITIAL_CONTROLLED_VOCABULARY = ['Karl', 'Graz', 'LaTeX', 'specialL', 'specialP'
 
 
 
-def handle_logging(args):
+def set_log_level(args):
     """Log handling and configuration"""
+    level = logging.INFO
+    format_str = "%(levelname)-8s %(message)s"
+
     if args.verbose:
-        FORMAT = "%(levelname)-8s %(asctime)-15s %(message)s"
-        logging.basicConfig(level=logging.DEBUG, format=FORMAT)
+        level=logging.DEBUG
+        format_str = "%(levelname)-8s %(asctime)-15s %(message)s"
     elif args.quiet:
-        FORMAT = "%(levelname)-8s %(message)s"
-        logging.basicConfig(level=logging.ERROR, format=FORMAT)
-    else:
-        FORMAT = "%(levelname)-8s %(message)s"
-        logging.basicConfig(level=logging.INFO, format=FORMAT)
+        level=logging.ERROR
+
+    logging.basicConfig(level=level, format=format_str)
 
 
 def error_exit(errorcode, text):
@@ -125,10 +124,10 @@ class SimpleCompleter(object):
                 self.matches = [s
                                 for s in self.options
                                 if s and s.startswith(text)]
-                logging.debug('%s matches: %s', repr(text), self.matches)
+                logger.debug('%s matches: %s', repr(text), self.matches)
             else:
                 self.matches = self.options[:]
-                logging.debug('(empty input) matches: %s', self.matches)
+                logger.debug('(empty input) matches: %s', self.matches)
 
         # Return the state'th item from the match list,
         # if we have that many.
@@ -136,7 +135,7 @@ class SimpleCompleter(object):
             response = self.matches[state]
         except IndexError:
             response = None
-        logging.debug('complete(%s, %s) => %s',
+        logger.debug('complete(%s, %s) => %s',
                       repr(text), state, repr(response))
         return response
 
@@ -238,20 +237,20 @@ def handle_file_and_symlink_source_if_found(filepath: Path, text, sep, dryrun, p
             num_errors += new_errors
 
             if old_sourcefilename != new_sourcefilename:
-                logging.info('Renaming the symlink-destination file of "' + filename + '" ("' +
+                logger.info('Renaming the symlink-destination file of "' + filename + '" ("' +
                              old_sourcefilename + '") as well …')
                 if args.dryrun:
-                    logging.debug('I would re-link the old sourcefilename "' + old_sourcefilename +
+                    logger.debug('I would re-link the old sourcefilename "' + old_sourcefilename +
                                   '" to the new one "' + new_sourcefilename + '"')
                 else:
-                    logging.debug('re-linking symlink "' + filename + '" from the old sourcefilename "' +
+                    logger.debug('re-linking symlink "' + filename + '" from the old sourcefilename "' +
                                   old_sourcefilename + '" to the new one "' + new_sourcefilename + '"')
                     os.remove(filename)
                     os.symlink(new_sourcefilename, filename)
             else:
-                logging.debug('The old sourcefilename "' + old_sourcefilename + '" did not change. So therefore I don\'t re-link.')
+                logger.debug('The old sourcefilename "' + old_sourcefilename + '" did not change. So therefore I don\'t re-link.')
         else:
-            logging.debug('The file "' + os.path.basename(filename) + '" is a symlink to "' + old_sourcefilename +
+            logger.debug('The file "' + os.path.basename(filename) + '" is a symlink to "' + old_sourcefilename +
                           '" but they two do have different basenames. Therefore I ignore the original file.')
 
     # after handling potential symlink originals, I now handle the file we were talking about in the first place:
@@ -270,7 +269,7 @@ def handle_file(path: Path, text: str, dryrun: bool, sep, prepend: bool, smartpr
     new_filename = ''
 
     if path.is_dir():
-        logging.warning("Skipping '{}', because it is a directory.".format(path))
+        logger.warning("Skipping '{}', because it is a directory.".format(path))
         num_errors += 1
         return num_errors, False
     elif not path.is_file():
@@ -280,8 +279,8 @@ def handle_file(path: Path, text: str, dryrun: bool, sep, prepend: bool, smartpr
 
     components = re.match(FILE_WITH_EXTENSION_REGEX, path.name)
     if components:
-        old_basename = components.group(FILE_WITH_EXTENSION_BASENAME_INDEX)
-        tags_with_extension = components.group(FILE_WITH_EXTENSION_TAGS_AND_EXT_INDEX)
+        old_basename = path.stem
+        tags_with_extension = components.group(2)
     else:
         logging.error("Could not extract file name components of '{}'. Please raise a bug report to the author.".format(path))
         num_errors += 1
@@ -292,7 +291,7 @@ def handle_file(path: Path, text: str, dryrun: bool, sep, prepend: bool, smartpr
     if prepend:
         # print("@@@ PREPEND")
 
-        # logging.debug('args.prepend is set with |' + str(path.parent) + '|' +
+        # logger.debug('args.prepend is set with |' + str(path.parent) + '|' +
         #                 str(text) + '|' + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
         # print('args.prepend is set with |' + str(path.parent) + '|' +
         #                 str(text) + '|' + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
@@ -302,32 +301,32 @@ def handle_file(path: Path, text: str, dryrun: bool, sep, prepend: bool, smartpr
         # print("@@@ SMART PREPEND")
         match = re.match(WITHTIME_AND_SECONDS_PATTERN, path.name)
         # print("MATCH", match, bool(match))
-        # logging.debug(f"args.smartprepend is set with | {path.parent} | {text} |" + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
-        # logging.debug('args.smartprepend is set with |' + str(type(os.path.dirname(filename))) + '|' +
+        # logger.debug(f"args.smartprepend is set with | {path.parent} | {text} |" + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
+        # logger.debug('args.smartprepend is set with |' + str(type(os.path.dirname(filename))) + '|' +
         #                 str(type(text)) + '|' + str(type(sep)) + '|' + str(type(old_basename)) + '|' + str(type(tags_with_extension)))
         if match:
             # print("INSIDE MATHC FUNC")
-            logging.debug('date/time-stamp found, insert text between date/time-stamp and the rest')
-            logging.debug(f'args.smartprepend is set with |{path.parent}|{str(match.group(1))}|{str(match.group(len(match.groups())))}|')
-            # logging.debug('args.smartprepend is set with |' + str(type(os.path.dirname(filename))) + '|' +
+            logger.debug('date/time-stamp found, insert text between date/time-stamp and the rest')
+            logger.debug(f'args.smartprepend is set with |{path.parent}|{str(match.group(1))}|{str(match.group(len(match.groups())))}|')
+            # logger.debug('args.smartprepend is set with |' + str(type(os.path.dirname(filename))) + '|' +
                             # str(type(match.group(1))) + '|' + str(type(match.group(len(match.groups())))) + '|')
             # print("MATCHGROUPS = ", match.groups())
             # newpath = path.parent / f"{match.group(1)}{match.group("timestamp_filename_seperator")}{text}{sep}{match.groups()[-1]}"
             newpath = path.parent / f"{match.group(1)}{sep}{text}{sep}{match.groups()[-1]}"
-            logging.debug('new_filename=%s', newpath)
+            logger.debug('new_filename=%s', newpath)
             # print("NEWPATHINSITE", newpath)
         else:
             # falling back to 'not smart' --prepend
-            # logging.debug("can't find a date/time-stamp, falling back to do a normal prepend instead (not smartprepend)")
+            # logger.debug("can't find a date/time-stamp, falling back to do a normal prepend instead (not smartprepend)")
             newpath = path.parent / f"{text}{sep}{old_basename}{tags_with_extension}"
 
 
 
     else:
         # Append
-        # print("@@@HERERHERHERHERH")
-        # print("-", path)
-        newpath = path.parent / f"{old_basename}{sep}{text}{tags_with_extension}"
+        new_filename = f"{old_basename}{sep}{text}{tags_with_extension}"
+
+        newpath = path.parent / new_filename
         # print("+", newpath)
     # except:
     #     logging.error("Error while trying to build new filename: " + str(sys.exc_info()[0]))
@@ -336,12 +335,12 @@ def handle_file(path: Path, text: str, dryrun: bool, sep, prepend: bool, smartpr
     assert(isinstance(newpath, Path))
 
     if dryrun:
-        logging.info(" ")
-        logging.info(" renaming \"%s\"" % path)
-        logging.info("      ⤷   \"%s\"" % (newpath))
+        logger.info(" ")
+        logger.info(" renaming \"%s\"" % path)
+        logger.info("      ⤷   \"%s\"" % (newpath))
     else:
-        logging.debug(" renaming \"%s\"" % path)
-        logging.debug("      ⤷   \"%s\"" % (newpath))
+        logger.debug(" renaming \"%s\"" % path)
+        logger.debug("      ⤷   \"%s\"" % (newpath))
         # try:
         newpath_created = path.rename(newpath)
         # except:
@@ -364,7 +363,8 @@ def separator():
 def main():
     parser = argparse.ArgumentParser(
         prog="appendfilename",
-        # usage=USAGE,
+        description="This tool renames files by inserting a chosen string. By default"
+        ", the chosen string is inserted after the old filename, but before any optional tags and before the file extension.",
         )
     parser.add_argument("-t", "--text", help="the text to add to the file name")
     parser.add_argument("-p", "--prepend", action="store_true",
@@ -384,7 +384,7 @@ def main():
     # print(args)
     # args.verbose = True
 
-    handle_logging(args)
+    set_log_level(args)
 
     if args.verbose and args.quiet:
         error_exit(1, "Options \"--verbose\" and \"--quiet\" found. Only 1 can be given, not both.")
@@ -401,8 +401,8 @@ def main():
 
     if not text:
 
-        logging.debug("interactive mode: asking for text ...")
-        logging.info("Add text to file name ...")
+        logger.debug("interactive mode: asking for text ...")
+        logger.info("Add text to file name ...")
 
         vocabulary = locate_and_parse_controlled_vocabulary()
         if vocabulary:
@@ -422,22 +422,22 @@ def main():
         text = input('Please enter text: ').strip()
 
         if not text or len(text) < 1:
-            logging.info("no text given, exiting.")
+            logger.info("no text given, exiting.")
             sys.stdout.flush()
             sys.exit(0)
 
-        logging.info("adding text \"%s\" ..." % text)
+        logger.info("adding text \"%s\" ..." % text)
 
-    logging.debug("text found: [%s]" % text)
+    logger.debug("text found: [%s]" % text)
 
-    logging.debug("extracting list of files ...")
-    logging.debug("len(args) [%s]" % str(len(args.files)))
+    logger.debug("extracting list of files ...")
+    logger.debug("len(args) [%s]" % str(len(args.files)))
     if len(args.files) < 1:
         error_exit(2, "Please add at least one file name as argument")
     files = args.files
-    logging.debug("%s filenames found: [%s]" % (str(len(files)), '], ['.join(files)))
+    logger.debug("%s filenames found: [%s]" % (str(len(files)), '], ['.join(files)))
 
-    logging.debug("iterate over files ...")
+    logger.debug("iterate over files ...")
     for filename in files:
 
         filepath = Path(filename)
@@ -453,9 +453,9 @@ def main():
     if num_errors > 0:
         error_exit(4, str(num_errors) + ' error(s) occurred. Please check output above.')
 
-    logging.debug("successfully finished.")
+    logger.debug("successfully finished.")
     if args.verbose:
-        input('Please press <Enter> for finishing...').strip()
+        input('Press <Enter> to close...')
 
 
 if __name__ == "__main__":
@@ -463,6 +463,6 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
 
-        logging.info("Received KeyboardInterrupt")
+        logger.info("Received KeyboardInterrupt")
 
 # END OF FILE #################################################################

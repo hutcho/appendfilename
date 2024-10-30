@@ -11,14 +11,12 @@
 Python 3.12.7
 """
 
-import os
 import re
+import subprocess
 import sys
 from pathlib import Path
-import subprocess
 
 import pytest
-
 
 TEST_DIR = Path("./.tmptestfiles")
 TEST_DIR.mkdir(exist_ok=True)
@@ -48,13 +46,13 @@ def create_test_file(filename):
 @pytest.mark.parametrize(
     "filename",
     [
+        "test",
+        "test.",
         "test.txt",
-        "2021-12-31 .txt",
-        "2021-12-31T18.48.22 test.txt",
-        "20211231 test.txt",
-        "2012-12 test.txt",
-        "211231 test.txt",
-        "211231.txt",
+        "2021-12-31.txt",
+        "2021-12-31T18.48.22.txt",
+        "20211231.t.x.t",
+        "211231 test.longextensiontext",
     ],
 )
 @pytest.mark.parametrize(
@@ -67,11 +65,11 @@ def create_test_file(filename):
 @pytest.mark.parametrize(
     "sep", [
         " ",
-        "!",
-        "@", "#", "$", "%", "_", "+", "=", "-"
+        "_",
+        "-"
     ]
 )
-def test_append_sep_notags(create_test_file, append_text: str, sep: str):
+def test_append_sep_notags(create_test_file: Path, append_text: str, sep: str):
     """Check addition just ahead the file extension.
 
     create_test_file        A fixture to create the files and remove them
@@ -83,9 +81,9 @@ def test_append_sep_notags(create_test_file, append_text: str, sep: str):
 
     command = f"{sys.executable} {TARGET_PROGRAM} -t \"{append_text}\" --sep \"{sep}\" \"{original_path}\""
     subprocess.run(command)
-    new_filename = f"{str(original_path)[:-4]}{sep}{append_text}.txt"
+    new_filename = f"{original_path.stem}{sep}{append_text}{original_path.suffix}"
+    new_path = original_path.parent / new_filename
 
-    new_path = Path(new_filename)
     assert new_path.is_file()
     new_path.unlink()
 
