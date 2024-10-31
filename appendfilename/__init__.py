@@ -280,59 +280,54 @@ def handle_file(path: Path, text: str, dryrun: bool, sep, prepend: bool, smartpr
     components = re.match(FILE_WITH_EXTENSION_REGEX, path.name)
     if components:
         old_basename = components.group("existing_basename")
-        # print("COMPONENTS", components.groups())
-        # print("groupdict", components.groupdict())
         tags_with_extension = components.group("tags_and_ext")
     else:
         logging.error("Could not extract file name components of '%s'. Please raise a bug report to the author.", path)
         num_errors += 1
         return num_errors, False
 
-    # print("@def handle_file")
+    try:
+        if prepend:
+            # print("@@@ PREPEND")
 
-    if prepend:
-        # print("@@@ PREPEND")
-
-        # logger.debug('args.prepend is set with |' + str(path.parent) + '|' +
-        #                 str(text) + '|' + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
-        # print('args.prepend is set with |' + str(path.parent) + '|' +
-        #                 str(text) + '|' + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
-        newpath = path.parent / f"{text}{sep}{old_basename}{tags_with_extension}"
-
-    elif smartprepend:
-        # print("@@@ SMART PREPEND")
-        match = re.match(WITHTIME_AND_SECONDS_PATTERN, path.name)
-        # print("MATCH", match, bool(match))
-        # logger.debug(f"args.smartprepend is set with | {path.parent} | {text} |" + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
-        # logger.debug('args.smartprepend is set with |' + str(type(os.path.dirname(filename))) + '|' +
-        #                 str(type(text)) + '|' + str(type(sep)) + '|' + str(type(old_basename)) + '|' + str(type(tags_with_extension)))
-        if match:
-            # print("INSIDE MATHC FUNC")
-            logger.debug('date/time-stamp found, insert text between date/time-stamp and the rest')
-            logger.debug(f'args.smartprepend is set with |{path.parent}|{str(match.group(1))}|{str(match.group(len(match.groups())))}|')
-            # logger.debug('args.smartprepend is set with |' + str(type(os.path.dirname(filename))) + '|' +
-                            # str(type(match.group(1))) + '|' + str(type(match.group(len(match.groups())))) + '|')
-            # print("MATCHGROUPS = ", match.groups())
-            # newpath = path.parent / f"{match.group(1)}{match.group("timestamp_filename_seperator")}{text}{sep}{match.groups()[-1]}"
-            newpath = path.parent / f"{match.group(1)}{sep}{text}{sep}{match.groups()[-1]}"
-            logger.debug('new_filename=%s', newpath)
-            # print("NEWPATHINSITE", newpath)
-        else:
-            # falling back to 'not smart' --prepend
-            # logger.debug("can't find a date/time-stamp, falling back to do a normal prepend instead (not smartprepend)")
+            # logger.debug('args.prepend is set with |' + str(path.parent) + '|' +
+            #                 str(text) + '|' + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
+            # print('args.prepend is set with |' + str(path.parent) + '|' +
+            #                 str(text) + '|' + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
             newpath = path.parent / f"{text}{sep}{old_basename}{tags_with_extension}"
 
+        elif smartprepend:
+            # print("@@@ SMART PREPEND")
+            match = re.match(WITHTIME_AND_SECONDS_PATTERN, path.name)
+            # print("MATCH", match, bool(match))
+            # logger.debug(f"args.smartprepend is set with | {path.parent} | {text} |" + str(sep) + '|' + str(old_basename) + '|' + str(tags_with_extension))
+            # logger.debug('args.smartprepend is set with |' + str(type(os.path.dirname(filename))) + '|' +
+            #                 str(type(text)) + '|' + str(type(sep)) + '|' + str(type(old_basename)) + '|' + str(type(tags_with_extension)))
+            if match:
+                # print("INSIDE MATHC FUNC")
+                logger.debug('date/time-stamp found, insert text between date/time-stamp and the rest')
+                logger.debug(f'args.smartprepend is set with |{path.parent}|{str(match.group(1))}|{str(match.group(len(match.groups())))}|')
+                # logger.debug('args.smartprepend is set with |' + str(type(os.path.dirname(filename))) + '|' +
+                                # str(type(match.group(1))) + '|' + str(type(match.group(len(match.groups())))) + '|')
+                # print("MATCHGROUPS = ", match.groups())
+                # newpath = path.parent / f"{match.group(1)}{match.group("timestamp_filename_seperator")}{text}{sep}{match.groups()[-1]}"
+                newpath = path.parent / f"{match.group(1)}{sep}{text}{sep}{match.groups()[-1]}"
+                logger.debug('new_filename=%s', newpath)
+                # print("NEWPATHINSITE", newpath)
+            else:
+                # falling back to 'not smart' --prepend
+                # logger.debug("can't find a date/time-stamp, falling back to do a normal prepend instead (not smartprepend)")
+                newpath = path.parent / f"{text}{sep}{old_basename}{tags_with_extension}"
 
+        else:
+            # Append
+            new_filename = f"{old_basename}{sep}{text}{tags_with_extension}"
+            newpath = path.parent / new_filename
 
-    else:
-        # Append
-        new_filename = f"{old_basename}{sep}{text}{tags_with_extension}"
-        newpath = path.parent / new_filename
-    # except:
-    #     logging.error("Error while trying to build new filename: " + str(sys.exc_info()[0]))
-    #     num_errors += 1
-    #     return num_errors, False
-    assert(isinstance(newpath, Path))
+    except Exception as e:
+        logging.error("Error while trying to build new filename: " + str(e))
+        num_errors += 1
+        return num_errors, False
 
     if dryrun:
         logger.info(" ")
