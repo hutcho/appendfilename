@@ -91,17 +91,20 @@ def test_append_sep_notags(create_test_file: Path, append_text: str, sep: str):
 @pytest.mark.prepend
 @pytest.mark.parametrize("filename", [
     "test.txt",
-    "2021-12-31_test.txt",
+    "2021-12-31_test -- tag.txt",
     "2021-12-31T18.48.22@test.txt",
-    "20211231 test.txt",
+    "20211231 test -- tag tag2 tag3.txt",
     "2012-12_test.txt",
     "211231_test.txt"
 ])
 @pytest.mark.parametrize("append_text", ["book", "book_shelf",
                                   ])
-@pytest.mark.parametrize("sep", [" ", "!", "@", "#", "$", "%", "_", "+",
-                                  "=", "-", "asd"])
-def test_prepend_sep_notags(create_test_file, append_text: str, sep: str):
+@pytest.mark.parametrize("sep", [
+    " ",
+    "!",
+    "@",
+    "-"])
+def test_prepend_sep(create_test_file, append_text: str, sep: str):
     """Check addition just ahead the file extension.
 
     create_test_file        A fixture to create the files and remove them
@@ -124,30 +127,25 @@ def test_prepend_sep_notags(create_test_file, append_text: str, sep: str):
 @pytest.mark.parametrize("filename", [
     "test.txt",
     "2021-12-31 test.txt",
+    "2021-12-31T18.48.22 test -- tag tag2.txt",
     "2021-12-31T18.48.22 test.txt",
-    "20211231_test.txt",
+    "20211231_test -- tag.txt",
     "2021-12_test.txt",
     "211231_test.txt"
     ])
 @pytest.mark.parametrize("append_text", [
     "book",
     "book_shelf",
+    "book she-lf",
                                   ])
 @pytest.mark.parametrize("sep", [
     " " ,
     "#",
-    "!",
-    "@",
-    "#",
-    "$",
-    "%",
-    # "*",
+    # "*", windows doesn't allow star in filenames
     "_",
-    "+",
-    "=",
     "-"
                                   ])
-def test_smartprepend_sep_notags(create_test_file, append_text, sep):
+def test_smartprepend(create_test_file, append_text, sep):
     """Check that any time stamp stays at the front of the filename.
 
     create_test_file        A fixture to create the files and remove them
@@ -238,6 +236,54 @@ def test_smartprepend_sep_notags(create_test_file, append_text, sep):
     assert new_path.is_file()
     new_path.unlink()
 
-# XXX TODO test with tags present e.g. text -- tag1 tag2.txt
-# XXX test different exteneions like .jpeg and .tests-etst and .test_sds
+
+@pytest.mark.defaultwithtags
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "test -- tag",
+        "test -- tag.",
+        "test -- tag.txt",
+        "2021-12-31 -- tag.txt",
+        "2021-12-31T18.48.22 -- tag.txt",
+        "20211231.t.x -- tag.t",
+        "211231 test -- tag.longextensiontext",
+    ],
+)
+@pytest.mark.parametrize(
+    "append_text", [
+        "book",
+        "book_shelf",
+        "book shelf"
+              ]
+)
+@pytest.mark.parametrize(
+    "sep", [
+        " ",
+        "_",
+        "-"
+    ]
+)
+def test_append_sep_tags(create_test_file: Path, append_text: str, sep: str):
+    """Check addition just ahead the file extension.
+
+    create_test_file        A fixture to create the files and remove them
+    append_text             text to append
+    sep                     separator between existing filename and append_text
+    """
+
+    original_path = create_test_file
+
+    command = f"{sys.executable} {TARGET_PROGRAM} -t \"{append_text}\" --sep \"{sep}\" \"{original_path}\""
+    subprocess.run(command)
+
+    new_filename = str(original_path).replace(" -- ", f"{sep}{append_text} -- ")
+    new_path = Path(new_filename)
+
+    print("-TEST OLD PATH=".ljust(25), original_path)
+    print("+TEST NEW PATH=".ljust(25), new_path)
+
+    assert new_path.is_file()
+    new_path.unlink()
+
 # XXX test the regexs hard

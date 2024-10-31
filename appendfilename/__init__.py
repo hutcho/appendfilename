@@ -69,8 +69,8 @@ WITHTIME_AND_SECONDS_PATTERN  = re.compile(
 #     """)
 
 # file names containing optional tags matches following regular expression
-RE_TAG_ENDING = r"(( -- .*)?(\.\w+?)?)$"
-FILE_WITH_EXTENSION_REGEX = re.compile(fr"(.*?){RE_TAG_ENDING}")
+RE_TAG_ENDING = r"(?P<tags_and_ext>(?P<tags> -- .*?)?(?P<ext>\.\w+?)?)$"
+FILE_WITH_EXTENSION_REGEX = re.compile(fr"(?P<existing_basename>.*?){RE_TAG_ENDING}")
 
 
 # RegEx which defines "what is a file name component" for tab completion:
@@ -279,10 +279,12 @@ def handle_file(path: Path, text: str, dryrun: bool, sep, prepend: bool, smartpr
 
     components = re.match(FILE_WITH_EXTENSION_REGEX, path.name)
     if components:
-        old_basename = path.stem
-        tags_with_extension = components.group(2)
+        old_basename = components.group("existing_basename")
+        # print("COMPONENTS", components.groups())
+        # print("groupdict", components.groupdict())
+        tags_with_extension = components.group("tags_and_ext")
     else:
-        logging.error("Could not extract file name components of '{}'. Please raise a bug report to the author.".format(path))
+        logging.error("Could not extract file name components of '%s'. Please raise a bug report to the author.", path)
         num_errors += 1
         return num_errors, False
 
@@ -325,9 +327,7 @@ def handle_file(path: Path, text: str, dryrun: bool, sep, prepend: bool, smartpr
     else:
         # Append
         new_filename = f"{old_basename}{sep}{text}{tags_with_extension}"
-
         newpath = path.parent / new_filename
-        # print("+", newpath)
     # except:
     #     logging.error("Error while trying to build new filename: " + str(sys.exc_info()[0]))
     #     num_errors += 1
